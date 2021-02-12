@@ -12,7 +12,7 @@ public class PlayerProperties : ScriptableObject
     [SerializeField] float DodgeForce = 10;
     [SerializeField] float DodgeForceTolerance = 5;
     [SerializeField][Range(.1f,2)] float DodgeTime = 0.5f;
-    [SerializeField][Range(.1f,.5f)] float DodgeTimeTolerance = .25f;
+    [SerializeField][Range(0,.5f)] float DodgeTimeTolerance = .25f;
 
     [Header("Plate Stack")]
     [Space(10)]
@@ -28,7 +28,10 @@ public class PlayerProperties : ScriptableObject
     public float plateStackDistance => PlateStackDistance;
     public float minInputDistance => MinInputDistance;
 
-    public float getDodgeTime()
+    public float dodgeForce { get { return getDodgeForce(); } }
+    public float dodgeTime { get { return getDodgeTime(); } }
+
+    float getDodgeTime()
     {
         float min = DodgeTime - DodgeTimeTolerance;
         float max = DodgeTime + DodgeTimeTolerance;
@@ -36,7 +39,7 @@ public class PlayerProperties : ScriptableObject
         return Random.Range(min, max);
     }
 
-    public float getDodgeForce()
+    float getDodgeForce()
     {
         float min = DodgeForce - DodgeForceTolerance;
         float max = DodgeForce + DodgeForceTolerance;

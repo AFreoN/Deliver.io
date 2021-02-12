@@ -23,12 +23,49 @@ public static class Utilities
         return c;
     }
 
+    public static Transform[] ToTransformArray(this Component[] components)
+    {
+        Transform[] t = new Transform[components.Length];
+        for(int i = 0; i < components.Length; i++)
+        {
+            t[i] = components[i].transform;
+        }
+        return t;
+    }
+
     public static bool IsInView(this Transform to, Transform target, float maxAngle)
     {
         bool result = false;
 
-        float ang = Vector3.Angle(to.forward, (target.position - to.position).normalized);
-        result = ang <= maxAngle * .5f ? true : false;
+        float ang = Vector3.Angle(to.forward, (target.position.xz() - to.position.xz()).normalized);
+        result = ang <= maxAngle ? true : false;
+
+        //Debug.Log("angle = " + ang);
+        //if(to.gameObject.CompareTag(TagsLayers.enemyTag))
+
+        return result;
+    }
+
+    public static bool IsInView(this Transform t, Vector3 pos, float maxAngle)
+    {
+        bool result = false;
+
+        float ang = Vector3.Angle(t.forward, (pos.xz() - t.position.xz()).normalized );
+        result = ang <= maxAngle ? true : false;
+        //Debug.Log("New Angle = " + ang);
+
+        return result;
+    }
+
+    public static bool IsInView(this Collision collision, float maxAngle)
+    {
+        bool result = false;
+        Transform transform = collision.transform;
+        Vector3 position = collision.GetContact(0).point.xz();
+
+        float ang = Vector3.Angle(transform.forward, (position.xz() - transform.position.xz()).normalized);
+        result = ang <= maxAngle ? true : false;
+        Debug.Log("angle = " + ang);
 
         return result;
     }
@@ -40,14 +77,39 @@ public static class Utilities
         return pos.normalized;
     }
 
-    public static void alignTransformPositions(this List<Transform> tList, float stackDistance, Directions dir, Transform parent = null)
+    public static Vector3 xz(this Vector3 v)
+    {
+        return new Vector3(v.x, 0, v.z);
+    }
+
+    public static Vector3 yz(this Vector3 v)
+    {
+        return new Vector3(0, v.y, v.z);
+    }
+
+    public static Vector3 xy(this Vector3 v)
+    {
+        return new Vector3(v.x, v.y, 0);
+    }
+
+    public static Vector3 getFaceDirection(this Transform t, Transform facing)
+    {
+        Vector3 direction = facing.position - t.position;
+        direction = direction.xz() + Vector3.up * t.position.y;
+
+        return direction;
+    }
+
+    public static void alignTransformPositions(this List<Transform> tList, float stackDistance, Directions dir, Transform parent = null, Space space = Space.World)
     {
         for(int i = 0; i < tList.Count; i++)
         {
             Transform t = tList[i];
             t.SetParent(parent);
             t.localRotation = Quaternion.identity;
-            t.localPosition = Vector3.zero + dir.enumToVector3(t) * (i * stackDistance);
+
+            Vector3 direction = space == Space.World ? dir.enumToVector3() : dir.enumToVector3(t);
+            t.localPosition = Vector3.zero + direction * (i * stackDistance);
         }
     }
 

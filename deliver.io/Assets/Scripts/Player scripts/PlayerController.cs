@@ -6,6 +6,7 @@ public class PlayerController : MonoBehaviour
 {
     Rigidbody rb = null;
     Joystick joyStick = null;
+    [HideInInspector] public PowerHandler powerHandler = null;
 
     [SerializeField] PlayerProperties playerProps = null;
 
@@ -21,12 +22,17 @@ public class PlayerController : MonoBehaviour
     float plateStackDistance = .1f;
     Transform platesHolder = null;
     [SerializeField] List<Transform> plates = new List<Transform>();
+    [HideInInspector] public bool havePlates = false;
 
-    private void Start()
+    private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         joyStick = GetComponent<Joystick>();
+        powerHandler = new PowerHandler(transform, 1);
+    }
 
+    private void Start()
+    {
         getValuesFromProps();
 
         playerState = PLAYERSTATE.Idle;
@@ -36,7 +42,7 @@ public class PlayerController : MonoBehaviour
     void getValuesFromProps()
     {
         movementSpeed = playerProps.playerSpeed;
-        speedReductionPerPlate = playerProps.speedReductionPerPlate;
+        speedReductionPerPlate = ControlValues.speedReductionPerPlate;
         minPlayerSpeed = playerProps.minPlayerSpeed;
 
         minInputDistance = playerProps.minInputDistance;
@@ -45,6 +51,8 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        havePlates = plates.Count > 0 ? true : false;
+
         if(GameManager.gameState == GameState.InGame && playerState != PLAYERSTATE.Dodged && joyStick.minDisMoved(minInputDistance))
         {
             if (plates.Count != 0)
@@ -75,7 +83,7 @@ public class PlayerController : MonoBehaviour
                 break;
 
             case PLAYERSTATE.Run:
-                rb.velocity = transform.forward * movementSpeed;
+                rb.velocity = transform.forward * (movementSpeed + powerHandler.speed);
                 break;
 
             case PLAYERSTATE.CarryIdle:
@@ -83,8 +91,9 @@ public class PlayerController : MonoBehaviour
                 break;
 
             case PLAYERSTATE.CarryRun:
-                float clampedReduction = Mathf.Clamp((plates.Count * speedReductionPerPlate), 0, minPlayerSpeed);
-                float currentSpeed = movementSpeed - clampedReduction;
+                float normalVelocity = movementSpeed + powerHandler.speed;
+                float reduction = 1 - plates.Count * speedReductionPerPlate;        //Speed reduction by carrying plates
+                float currentSpeed = Mathf.Clamp(normalVelocity * reduction, minPlayerSpeed, Mathf.Infinity);
                 rb.velocity = transform.forward * currentSpeed;
                 break;
 
@@ -107,104 +116,52 @@ public class PlayerController : MonoBehaviour
 
         if(collision.gameObject.CompareTag(TagsLayers.tableTag))
         {
-            if (plates.Count == 0 || collision.gameObject.GetComponent<Table>() != SpawnsTables.currentDeliverTable)
-                return;
+            if (plates.Count != 0 && collision.gameObject.GetComponent<Table>() == SpawnsTables.currentDeliverTable)
+            {
+                powerHandler.updateScale(plates.Count);
 
-            foreach(Transform t in plates)
-                Destroy(t.gameObject);
+                foreach (Transform t in plates)
+                    Destroy(t.gameObject);
 
-            plates.Clear();
-            SpawnsTables.changeDeliverTable();
+                plates.Clear();
+                SpawnsTables.changeDeliverTable();
+            }
         }
 
         if(collision.gameObject.CompareTag(TagsLayers.enemyTag))
         {
-            EnemyController ec = collision.gameObject.GetComponent<EnemyController>();
-            if (ec == null || playerState == PLAYERSTATE.Dodged)
-                return;
-
-            if(plates.Count == 0 && ec.plates.Count == 0)       //If both player and enemy don't have plates
-            {
-                handleEnemyCollision(InteractionStatus.None, collision);
-            }
-            else if(plates.Count == 0 && ec.plates.Count != 0)      //If enemy have plates
-            {
-                handleEnemyCollision(InteractionStatus.You, collision);
-            }
-            else if(plates.Count != 0 && ec.plates.Count != 0)      //If both enemy and player have plates
-            {
-                handleEnemyCollision(InteractionStatus.Both, collision);
-            }
+            Interactor.handleInteraction(this, collision.gameObject.GetComponent<EnemyController>());
         }
     }
 
-    void handleEnemyCollision(InteractionStatus status, Collision collision)
+    void startDodge(EnemyController other)
     {
-        Debug.Log("Interaction Status = " + status);
+        playerState = PLAYERSTATE.Dodged;
 
-        EnemyController ec = collision.gameObject.GetComponent<EnemyController>();
-        if (ec == null)
+        float enemyPower = other.powerHandler.power;
+
+        transform.forward = transform.getFaceDirection(other.transform);
+
+        rb.AddForce(-transform.forward * (playerProps.dodgeForce + enemyPower), ForceMode.Impulse);
+
+        if (currentDodgeRoutine != null)
+            StopCoroutine(currentDodgeRoutine);
+
+        currentDodgeRoutine = StartCoroutine(returnDodgeBack(playerProps.dodgeTime));
+    }
+
+    void stealPlate(EnemyController other)
+    {
+        if (other == null || other.havePlate == false)
             return;
 
-        switch(status)
-        {
-            case InteractionStatus.None:
+        List<Transform> stealablePlates = new List<Transform>();
+        stealablePlates = other.getPlates(this);
 
-                playerState = PLAYERSTATE.Dodged;
-                rb.AddForce(-transform.forward * playerProps.getDodgeForce(), ForceMode.Impulse);
+        foreach (Transform t in stealablePlates)
+            plates.Add(t);
 
-                if (currentDodgeRoutine != null)
-                    StopCoroutine(currentDodgeRoutine);
-
-                currentDodgeRoutine = StartCoroutine( returnDodgeBack(playerProps.getDodgeTime()) );
-
-                break;
-
-            case InteractionStatus.You:
-
-                bool inView = collision.transform.IsInView(transform, GameManager.viewAngle);  //Know whether the player is in enemy view or not by using extension method
-
-                if (inView)      //If player is in enemy view, then player will dodge back
-                {
-                    playerState = PLAYERSTATE.Dodged;
-
-                    Vector3 direction = (transform.normalizeXZ() - collision.transform.normalizeXZ()).normalized;
-                    transform.forward = new Vector3(-direction.x, transform.position.y, -direction.z);
-                    rb.AddForce(direction * playerProps.getDodgeForce(), ForceMode.Impulse);
-
-                    if (currentDodgeRoutine != null)
-                        StopCoroutine(currentDodgeRoutine);
-
-                    currentDodgeRoutine = StartCoroutine(returnDodgeBack(playerProps.getDodgeTime()));
-                }
-                else        //Else player is not in enemy view, so player can steal the plate
-                {
-                    //plates = ec.getPlates();
-                    plates.Clear();
-                    plates = new List<Transform>();
-                    foreach (Transform t in ec.getPlates())
-                        plates.Add(t);
-
-                    plates.alignTransformPositions(plateStackDistance, Directions.Up, platesHolder);
-                }
-
-                break;
-
-            case InteractionStatus.Both:
-
-                inView = collision.transform.IsInView(transform, GameManager.viewAngle);  //Know whether the player is in enemy view or not by using extension method
-
-                if (inView == false)      //If player is not in view of enemy
-                {
-                    List<Transform> enemyPlates = ec.getPlates();
-                    foreach (Transform t in enemyPlates)
-                        plates.Add(t);
-
-                    plates.alignTransformPositions(plateStackDistance, Directions.Up, platesHolder);
-                }
-
-                break;
-        }
+        plates.alignTransformPositions(plateStackDistance, Directions.Up, platesHolder);
     }
 
     IEnumerator returnDodgeBack(float waitTime)
@@ -229,6 +186,37 @@ public class PlayerController : MonoBehaviour
         t.localPosition = Vector3.zero;
         t.localRotation = Quaternion.identity;
         t.localPosition = t.up * plateStackDistance * (plates.Count - 1);
+    }
+
+    public List<Transform> getPlates(EnemyController stealer)
+    {
+        startDodge(stealer);
+
+        List<Transform> result = new List<Transform>();
+        foreach (Transform t in plates)
+            result.Add(t);
+
+        plates.Clear();
+        havePlates = false;
+
+        return result;
+    }
+
+    public void GetInteractiosStatus(Interaction inter, EnemyController other)
+    {
+        switch(inter)
+        {
+            case Interaction.Dodge:
+                startDodge(other);
+                break;
+
+            case Interaction.Steal:
+                stealPlate(other);
+                break;
+
+            default:
+                break;
+        }
     }
 }
 

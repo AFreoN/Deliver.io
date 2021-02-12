@@ -35,7 +35,7 @@ public class EnemyAnimator : MonoBehaviour
                 break;
 
             case ENEMYSTATE.Dodged:
-                SetAnimValues(true, true);
+                SetAnimValues(false, false);
                 break;
         }
     }

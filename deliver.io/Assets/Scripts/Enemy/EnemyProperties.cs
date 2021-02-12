@@ -32,7 +32,11 @@ public class EnemyProperties : ScriptableObject
 
     public float plateStackDistance => PlateStackDistance;
 
-    public float getDodgeForce()
+    public float dodgeForce { get { return getDodgeForce(); } }
+    public float dodgeTime { get { return getDodgeTime(); } }
+    public float checkDelay { get { return OtherPlayerCheckDelay; } }
+
+    float getDodgeForce()
     {
         float min = DodgeForce - DodgeForceTolerance;
         float max = DodgeForce + DodgeForceTolerance;
@@ -40,7 +44,7 @@ public class EnemyProperties : ScriptableObject
         return Random.Range(min, max);
     }
 
-    public float getDodgeTime()
+    float getDodgeTime()
     {
         float min = DodgeTime - DodgeTimeTolerance;
         float max = DodgeTime + DodgeTimeTolerance;
@@ -48,7 +52,7 @@ public class EnemyProperties : ScriptableObject
         return Random.Range(min, max);
     }
 
-    public float getCheckDelay()
+    float getCheckDelay()
     {
         float min = OtherPlayerCheckDelay - CheckDelayTolerance;
         float max = OtherPlayerCheckDelay + CheckDelayTolerance;

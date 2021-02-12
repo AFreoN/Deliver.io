@@ -5,7 +5,6 @@ public class GameManager : MonoBehaviour
     public static GameManager instance;
 
     public static GameState gameState { get; private set; }
-    public static float viewAngle { get { return 60; } private set { } }
 
     private void Awake()
     {
